@@ -1,5 +1,6 @@
 package p1;
 import java.sql.*;
+import java.sql.Savepoint;
 import java.util.Scanner;
 public class BankDBHandler {
 	static Scanner sc = new Scanner(System.in);
@@ -54,6 +55,7 @@ public class BankDBHandler {
 				do {
 					System.out.println("1. Transfer money: ");
 					System.out.println("2. View Balance: ");
+					System.out.println("3. View Transaction History: ");
 					System.out.println("5. Log Out");
 					
 					ch = Integer.parseInt(sc.nextLine());
@@ -76,6 +78,11 @@ public class BankDBHandler {
 //						view balance
 						if(!BankDBHandler.getBalance(senderAccount)) {
 							System.out.println("Error in balance");
+						}
+					}
+					else if(ch == 3) {
+						if(!showTransactionHistory(senderAccount)) {
+							System.out.println("Error in getting transactions.");
 						}
 					}
 					else if(ch != 5){
@@ -117,7 +124,7 @@ public class BankDBHandler {
 			System.out.println("Enter valid amount");
 			return false;
 		}
-		
+		Savepoint SavePointBeforeDebit = null;
 		try {
 			con.setAutoCommit(false);
 			PreparedStatement send_ps = con.prepareStatement("SELECT * FROM customer where ac_no = ?");
@@ -142,7 +149,7 @@ public class BankDBHandler {
 				return false;
 			}
 			
-			con.setSavepoint();
+			 SavePointBeforeDebit = con.setSavepoint("SavePointBeforeDebit");
 //			debit the amount
 			
 			
@@ -171,16 +178,65 @@ public class BankDBHandler {
 				System.out.println("Amount is credited to receiver's account!1");
 			}
 			else {
+				
+				return false;
+			}
+			
+			PreparedStatement transaction = con.prepareStatement(" insert into transaction values(?,?,?)");
+			transaction.setInt(1, sender);
+			transaction.setInt(2, receiver);
+			transaction.setInt(3, amount);
+			cnt = transaction.executeUpdate();
+			if(cnt > 0) {
+				System.out.println("Transaction successFull");
+			}
+			else {
+				try {
+					con.rollback(SavePointBeforeDebit);
+				}
+				catch(Exception eee) {
+					eee.printStackTrace();
+				}
 				return false;
 			}
 			con.commit();
+			
 			return true;
 			
 		}
 		catch(Exception e) {
+		
+				if(con != null) {
+					 con.rollback(SavePointBeforeDebit);
+				}
+				
+			
 			e.printStackTrace();
 		}
 		return false;
 	}
 	
+	protected static boolean showTransactionHistory(int ac_no) {
+		try {
+			PreparedStatement transactions = con.prepareStatement("SELECT * FROM transaction WHERE sender_id = ? OR receiver_id = ?");
+			transactions.setInt(1,ac_no);
+			transactions.setInt(2,ac_no);
+			ResultSet rs = transactions.executeQuery();
+			if(rs.next()) {
+				System.out.println("Sender \t Receiver \t Amount");
+				while(rs.next()) {
+					System.out.println(rs.getInt(1) + "\t  " + rs.getInt(2) + "\t  " + rs.getInt(3));
+				}
+				return true;
+			}
+			else {
+				System.out.println("No Transaction history");
+				return true;
+			}
+		} catch (Exception e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+		return false;
+	}
 }
